@@ -1,0 +1,26 @@
+[package]
+name = "glider"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Glider 4.0 (John Calhoun, 1991) in the terminal: the paper airplane in the house, for the Asciiverse catalog"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "glider"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.30"
+log = "0.4"
+env_logger = "0.11"
+rodio = { version = "0.22", default-features = false, features = ["playback"] }
+gilrs = { version = "0.11", optional = true }
+
+[features]
+default = ["gamepad"]
+gamepad = ["dep:gilrs"]
+
+[profile.release]
+debug = 1
