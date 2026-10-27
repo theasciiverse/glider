@@ -104,11 +104,13 @@ pub struct Settings {
     pub music: bool,
     pub name: String,
     pub house: String,
+    /// The silhouette view rather than Calhoun's art.
+    pub silhouette: bool,
 }
 
 impl Default for Settings {
     fn default() -> Settings {
-        Settings { sound: true, music: true, name: String::new(), house: "The House".into() }
+        Settings { sound: true, music: true, name: String::new(), house: "The House".into(), silhouette: true }
     }
 }
 
@@ -123,6 +125,7 @@ impl Settings {
                 "music" => s.music = v != "off",
                 "name" => s.name = clean(v),
                 "house" => s.house = v.to_string(),
+                "view" => s.silhouette = v != "original",
                 _ => {}
             }
         }
@@ -132,7 +135,8 @@ impl Settings {
     pub fn save(&self) {
         let Some(p) = file("glider.cfg") else { return };
         let on = |b: bool| if b { "on" } else { "off" };
-        let text = format!("sound {}\nmusic {}\nname {}\nhouse {}\n", on(self.sound), on(self.music), clean(&self.name), self.house);
+        let view = if self.silhouette { "silhouette" } else { "original" };
+        let text = format!("sound {}\nmusic {}\nname {}\nhouse {}\nview {view}\n", on(self.sound), on(self.music), clean(&self.name), self.house);
         let _ = std::fs::write(p, text);
     }
 }

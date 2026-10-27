@@ -55,8 +55,10 @@ fn every_room_of_every_house_sets_up_and_draws() {
             for _ in 0..3 {
                 g.step(Controls::default());
             }
-            let pic = draw::room_picture(&a, &g);
-            let _ = draw::scene(&a, &g, &pic);
+            for look in [draw::Look::Original, draw::Look::Silhouette] {
+                let pic = draw::room_picture(&a, &g, look);
+                let _ = draw::scene(&a, &g, &pic, look);
+            }
         }
     }
 }

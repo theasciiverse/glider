@@ -264,17 +264,135 @@ fn draw_window(c: &mut Canvas, o: &Object) {
     pane(c, t);
 }
 
+/// How the pictures are drawn: Calhoun's art, or the silhouette view
+/// (softened backgrounds, flat furniture, objects in solid colours by
+/// role), which reads better at terminal sizes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Look {
+    Original,
+    Silhouette,
+}
+
+/// Silhouette colours. Hazards warm, prizes bright and cool, the house's
+/// own things in muted tones, the glider brightest.
+pub mod ink {
+    pub const GLIDER: [u8; 3] = [250, 250, 255];
+    pub const SHADOW: [u8; 3] = [16, 16, 24];
+    pub const WOOD: [u8; 3] = [150, 100, 55];
+    pub const SHELF: [u8; 3] = [185, 145, 90];
+    pub const FRAME: [u8; 3] = [125, 82, 45];
+    pub const GLASS: [u8; 3] = [150, 175, 190];
+    pub const FLAME: [u8; 3] = [255, 150, 40];
+    pub const SPARK: [u8; 3] = [130, 225, 255];
+    pub const DANGER: [u8; 3] = [230, 70, 60];
+    pub const TOAST: [u8; 3] = [220, 165, 95];
+    pub const FISH: [u8; 3] = [255, 140, 40];
+    pub const WATER: [u8; 3] = [90, 160, 255];
+    pub const DART: [u8; 3] = [235, 235, 235];
+    pub const BALLOON: [u8; 3] = [245, 80, 120];
+    pub const BAND: [u8; 3] = [235, 175, 95];
+}
+
+/// Objects drawn from their art even in the silhouette view: the house's
+/// own things, whose look tells what they are (books, a clock, a battery).
+/// Only what moves or hurts is a silhouette.
+fn keeps_art(kind: i32) -> bool {
+    matches!(
+        kind,
+        CLOCK | PAPER | BATTRY | RBR_BND | FLR_VNT | CEL_VNT | CEL_DCT | LFT_FAN | RIT_FAN | CANDLE | OUTLET | TOASTR | TEA_KTL | FSH_BWL | GREASE | SHREDR
+            | BOOKS | GUITAR | LIT_SWT | THERMO | PWR_SWT | BASKET | MAC_TSH | DRIP | 58 | 59
+    )
+}
+
+/// An object's silhouette colour.
+pub fn ink_for(kind: i32) -> [u8; 3] {
+    match kind {
+        CLOCK => [255, 205, 60],
+        PAPER => [210, 235, 255],
+        BATTRY => [120, 235, 95],
+        RBR_BND => ink::BAND,
+        FLR_VNT | CEL_VNT | CEL_DCT => [100, 118, 135],
+        LFT_FAN | RIT_FAN => [135, 155, 175],
+        CANDLE => [235, 225, 190],
+        48..=50 => ink::FLAME,
+        OUTLET => [115, 115, 125],
+        51 | 52 => ink::SPARK,
+        TOASTR | TEA_KTL => [195, 200, 210],
+        60..=65 => ink::TOAST,
+        FSH_BWL => [130, 190, 230],
+        66..=69 => ink::FISH,
+        BALL => ink::DANGER,
+        DRIP | 53..=57 => ink::WATER,
+        GREASE | 58 | 59 => [150, 140, 60],
+        SHREDR => [150, 150, 160],
+        BOOKS => [170, 75, 60],
+        GUITAR => [195, 85, 50],
+        LIT_SWT | THERMO | PWR_SWT => [225, 215, 190],
+        BASKET => [110, 170, 90],
+        MAC_TSH => [220, 210, 180],
+        TABLE => ink::WOOD,
+        SHELF => ink::SHELF,
+        _ => [180, 180, 180],
+    }
+}
+
+/// A sprite through a mask, as art or as a silhouette in `col`.
+fn paint(c: &mut Canvas, a: &Assets, look: Look, col: [u8; 3], src: Rect, msk: Rect, dst: Rect) {
+    c.ink = (look == Look::Silhouette).then_some(col);
+    c.copy_mask(a, src, msk, dst);
+    c.ink = None;
+}
+
+fn sprite(c: &mut Canvas, a: &Assets, look: Look, col: [u8; 3], src: Rect, dst: Rect) {
+    paint(c, a, look, col, src, src, dst);
+}
+
+/// A room object: its art, or (if it is not one of the house's own
+/// things) its silhouette.
+fn object(c: &mut Canvas, a: &Assets, look: Look, kind: i32, src: Rect, dst: Rect) {
+    let look = if keeps_art(kind) { Look::Original } else { look };
+    sprite(c, a, look, ink_for(kind), src, dst);
+}
+
+fn flat_table(c: &mut Canvas, a: &Assets, r: Rect) {
+    c.fill(r, ink::WOOD);
+    let mid = (r.left + r.right) / 2;
+    c.line(mid - 2, r.bottom, mid - 2, K_FLOOR_VERT - 7, 5, 1, ink::WOOD);
+    let s = src_rect(TABLE);
+    sprite(c, a, Look::Silhouette, ink::WOOD, s, s.at(mid - 31, K_FLOOR_VERT - 7));
+}
+
+fn flat_shelf(c: &mut Canvas, a: &Assets, r: Rect) {
+    c.fill(r, ink::SHELF);
+    let s = src_rect(SHELF);
+    sprite(c, a, Look::Silhouette, ink::SHELF, s, s.at(r.left + 15, r.bottom - 2));
+    sprite(c, a, Look::Silhouette, ink::SHELF, s, s.at(r.right - 25, r.bottom - 2));
+}
+
+fn flat_window(c: &mut Canvas, o: &Object) {
+    let r = o.bound;
+    c.fill(R(r.left - 4, r.top, r.right + 4, r.bottom), ink::FRAME);
+    let inner = r.inset_by(8, 16);
+    c.fill(inner, BLACK);
+    let mid = (r.bottom + r.top) / 2;
+    // the sash between the panes, moved up when the window is open
+    let mut sash = R(inner.left, mid - 2, inner.right, mid + 4);
+    if o.is_on {
+        sash.offset(0, 26 - (r.bottom - r.top) / 2);
+    }
+    c.fill(sash, ink::FRAME);
+}
+
 /// The room as it stands, without anything that moves: LoadABackground,
 /// ArrangeTiles and DrawAllObjects.
-pub fn room_picture(a: &Assets, g: &Game) -> Canvas {
+pub fn room_picture(a: &Assets, g: &Game, look: Look) -> Canvas {
     let mut c = Canvas::new();
     let room = g.room();
+    let objects = &room.objects[..room.n_objects as usize];
     if g.lights_out {
         c.fill(gfx::WHOLE, BLACK);
-        for o in &room.objects[..room.n_objects as usize] {
-            if o.kind == LIT_SWT {
-                c.sprite(a, src_rect(LIT_SWT), o.bound);
-            }
+        for o in objects.iter().filter(|o| o.kind == LIT_SWT) {
+            object(&mut c, a, look, LIT_SWT, src_rect(LIT_SWT), o.bound);
         }
         return c;
     }
@@ -285,23 +403,47 @@ pub fn room_picture(a: &Assets, g: &Game) -> Canvas {
         let i = i as i32;
         c.copy_bits(bg, R(panel * 64, 0, panel * 64 + 64, 342), R(i * 64, 0, i * 64 + 64, 342));
     }
-    for o in &room.objects[..room.n_objects as usize] {
+    let flat = look == Look::Silhouette;
+    if flat {
+        // stairs and paintings are part of the house, not things to read
+        for o in objects {
+            match o.kind {
+                PAINTG => c.copy_bits(&a.objects, src_rect(PAINTG), o.bound),
+                UP_STAR => c.copy_bits(&a.stair_up, R(0, 0, a.stair_up.w, a.stair_up.h), o.bound),
+                DN_STAR => c.copy_bits(&a.stair_down, R(0, 0, a.stair_down.w, a.stair_down.h), o.bound),
+                _ => {}
+            }
+        }
+        c.soften(4, 0.5);
+    }
+    for o in objects {
         let s = src_rect(o.kind);
         match o.kind {
+            TABLE if flat => flat_table(&mut c, a, o.bound),
+            SHELF if flat => flat_shelf(&mut c, a, o.bound),
+            CABNET if flat => c.fill(o.bound, ink::WOOD),
+            WINDOW if flat => flat_window(&mut c, o),
+            MIRROR if flat => {
+                c.fill(o.bound, ink::FRAME);
+                c.fill(o.bound.inset_by(3, 3), ink::GLASS);
+            }
+            PAINTG | UP_STAR | DN_STAR if flat => {}
             TABLE => draw_table(&mut c, a, o.bound),
             SHELF => draw_shelf(&mut c, a, o.bound),
             CABNET => draw_cabinet(&mut c, o.bound),
-            BOOKS | FLR_VNT..=CANDLE | LFT_FAN | RIT_FAN | LIT_SWT..=GUITAR | DRIP | TOASTR | FSH_BWL | TEA_KTL | BASKET | MAC_TSH => c.sprite(a, s, o.bound),
+            BOOKS | FLR_VNT..=CANDLE | LFT_FAN | RIT_FAN | LIT_SWT..=GUITAR | DRIP | TOASTR | FSH_BWL | TEA_KTL | BASKET | MAC_TSH => {
+                object(&mut c, a, look, o.kind, s, o.bound)
+            }
             GREASE => {
                 if !o.is_on {
                     let b = o.bound;
                     c.line(b.right, b.bottom - 2, o.amount, b.bottom - 2, 2, 2, BLACK);
-                    c.sprite(a, src_rect(59), b);
+                    object(&mut c, a, look, 59, src_rect(59), b);
                 }
             }
             CLOCK | PAPER | BATTRY | RBR_BND => {
                 if o.amount > 0 {
-                    c.sprite(a, s, o.bound);
+                    object(&mut c, a, look, o.kind, s, o.bound);
                 }
             }
             WINDOW => draw_window(&mut c, o),
@@ -315,14 +457,53 @@ pub fn room_picture(a: &Assets, g: &Game) -> Canvas {
     c
 }
 
+/// A straight edge of the house for the box-drawing overlay: furniture
+/// drawn from the room's rectangles, so its geometry is exact.
+#[derive(Clone, Copy, Debug)]
+pub enum Edge {
+    /// A horizontal bar (table top, shelf) along the middle of the rect.
+    Bar(Rect),
+    /// A vertical post (table leg) along the middle of the rect.
+    Post(Rect),
+    /// An outline (cabinet, window, mirror).
+    Outline(Rect),
+}
+
+/// The room's straight edges, for the silhouette view's line overlay.
+pub fn edges(g: &Game) -> Vec<(Edge, [u8; 3])> {
+    let mut out = Vec::new();
+    if g.lights_out {
+        return out;
+    }
+    let room = g.room();
+    let light = |c: [u8; 3]| [c[0].saturating_add(60), c[1].saturating_add(55), c[2].saturating_add(45)];
+    for o in &room.objects[..room.n_objects as usize] {
+        let r = o.bound;
+        match o.kind {
+            TABLE => {
+                let mid = (r.left + r.right) / 2;
+                out.push((Edge::Post(R(mid - 2, r.bottom, mid + 3, K_FLOOR_VERT - 7)), light(ink::WOOD)));
+                out.push((Edge::Bar(r), light(ink::WOOD)));
+            }
+            SHELF => out.push((Edge::Bar(r), light(ink::SHELF))),
+            CABNET => out.push((Edge::Outline(r), light(ink::WOOD))),
+            WINDOW => out.push((Edge::Outline(R(r.left - 4, r.top, r.right + 4, r.bottom)), light(ink::FRAME))),
+            MIRROR => out.push((Edge::Outline(r), light(ink::FRAME))),
+            _ => {}
+        }
+    }
+    out
+}
+
 // ---------------------------------------------------------------------
 // every frame
 
 /// The glider in its current pose at `dest`.
-fn draw_glider(c: &mut Canvas, a: &Assets, g: &Game, dest: Rect) {
+fn draw_glider(c: &mut Canvas, a: &Assets, look: Look, g: &Game, dest: Rect) {
     let gl = &g.glider;
+    let ink = ink::GLIDER;
     if g.life_normal {
-        c.sprite(a, glide_rct(gl.src_num), dest);
+        sprite(c, a, look, ink, glide_rct(gl.src_num), dest);
         return;
     }
     match gl.mode {
@@ -331,23 +512,25 @@ fn draw_glider(c: &mut Canvas, a: &Assets, g: &Game, dest: Rect) {
             if !gl.is_right {
                 m += 7;
             }
-            c.copy_mask(a, glide_rct(gl.src_num), glide_rct(m), dest);
+            paint(c, a, look, ink, glide_rct(gl.src_num), glide_rct(m), dest);
         }
         TURN_RT2LF | TURN_LF2RT => {
             let f = next_phase(gl.mode, gl.phase);
-            c.sprite(a, glide_rct(f), dest);
+            sprite(c, a, look, ink, glide_rct(f), dest);
         }
-        BURNING | ASCENDING | DESCENDING => c.sprite(a, glide_rct(gl.src_num), dest),
+        // on fire, the flames show in the silhouette view
+        BURNING => sprite(c, a, look, ink::FLAME, glide_rct(gl.src_num), dest),
+        ASCENDING | DESCENDING => sprite(c, a, look, ink, glide_rct(gl.src_num), dest),
         SHREDDING => {
             let h = dest.height();
-            c.sprite(a, R(256, 208 - h, 304, 208), dest);
+            sprite(c, a, look, ink, R(256, 208 - h, 304, 208), dest);
         }
-        _ => c.sprite(a, glide_rct(gl.src_num), dest),
+        _ => sprite(c, a, look, ink, glide_rct(gl.src_num), dest),
     }
 }
 
 /// One frame: the room picture with everything that moves on it.
-pub fn scene(a: &Assets, g: &Game, room: &Canvas) -> Canvas {
+pub fn scene(a: &Assets, g: &Game, room: &Canvas, look: Look) -> Canvas {
     let mut c = room.clone();
     let l = &g.lightning;
     if !g.window_rgn.is_empty() && (l.what_phase == 1 || l.what_phase == 3) {
@@ -366,45 +549,46 @@ pub fn scene(a: &Assets, g: &Game, room: &Canvas) -> Canvas {
     if let Some(m) = g.mirror_rgn {
         c.clip_to(m);
         let gl = &g.glider;
-        c.sprite(a, glide_rct(gl.src_num), gl.dest.offset_by(-32, -32));
+        sprite(&mut c, a, look, [200, 205, 215], glide_rct(gl.src_num), gl.dest.offset_by(-32, -32));
         c.unclip();
     }
     for cy in &g.cycles {
         let er = g.event_rect[cy.tied_to];
         match cy.kind {
-            CANDLE => c.sprite(a, src_rect(cy.position as i32), cy.whole),
+            CANDLE => sprite(&mut c, a, look, ink::FLAME, src_rect(cy.position as i32), cy.whole),
             OUTLET | GREASE => {
-                c.sprite(a, src_rect(cy.accel), cy.whole);
+                object(&mut c, a, look, cy.accel, src_rect(cy.accel), cy.whole);
                 if cy.kind == GREASE && cy.velocity > cy.whole.right + 1 {
                     let y = cy.whole.bottom - 2;
                     c.line(cy.whole.right, y, cy.velocity, y, 2, 2, BLACK);
                 }
             }
-            BALL => c.sprite(a, src_rect(BALL), er),
-            DRIP => c.sprite(a, src_rect(cy.phase), er),
+            BALL => sprite(&mut c, a, look, ink::DANGER, src_rect(BALL), er),
+            DRIP => object(&mut c, a, look, DRIP, src_rect(cy.phase), er),
             TOASTR => {
                 if cy.phase != 0 {
                     if let Some(t) = g.toast_rgn {
                         c.clip_to(t);
                     }
-                    c.sprite(a, src_rect(cy.phase), er);
+                    sprite(&mut c, a, look, ink::TOAST, src_rect(cy.phase), er);
                     c.unclip();
                 }
             }
-            FSH_BWL => c.sprite(a, src_rect(if cy.phase != 0 { cy.phase } else { 69 }), er),
+            FSH_BWL => sprite(&mut c, a, look, ink::FISH, src_rect(if cy.phase != 0 { cy.phase } else { 69 }), er),
             _ => {}
         }
     }
     let gl = &g.glider;
-    c.sprite(a, SHADO_RCT[if gl.is_right { 0 } else { 1 }], gl.shado_dest);
-    draw_glider(&mut c, a, g, gl.dest);
+    sprite(&mut c, a, look, ink::SHADOW, SHADO_RCT[if gl.is_right { 0 } else { 1 }], gl.shado_dest);
+    draw_glider(&mut c, a, look, g, gl.dest);
     for an in &g.animates {
         if !an.unseen {
-            c.sprite(a, animate_rct(an.kind, an.phase), an.dest);
+            let col = [ink::DART, [205, 205, 225], ink::BALLOON][an.kind.clamp(0, 2) as usize];
+            sprite(&mut c, a, look, col, animate_rct(an.kind, an.phase), an.dest);
         }
     }
     if g.band_borne {
-        c.sprite(a, band_rct(g.band.phase), g.band.dest);
+        sprite(&mut c, a, look, ink::BAND, band_rct(g.band.phase), g.band.dest);
     }
     if let Some(f) = &g.float_points {
         let col = if f.fresh {
@@ -416,7 +600,10 @@ pub fn scene(a: &Assets, g: &Game, room: &Canvas) -> Canvas {
         };
         c.text(&a.font, &f.says, f.where_r.left, f.where_r.bottom - 2, col);
     }
-    headline(&mut c, a, g);
+    // the silhouette view shows the headline's figures as terminal text
+    if look == Look::Original {
+        headline(&mut c, a, g);
+    }
     c
 }
 

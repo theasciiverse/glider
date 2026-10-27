@@ -38,6 +38,7 @@ pub enum Cmd {
     Help,
     Houses,
     Scores,
+    View,
     Exit,
     Any,
     Char(char),
@@ -147,6 +148,7 @@ impl Input {
             KeyCode::Char('?' | 'h' | 'H') | KeyCode::F(1) => self.cmds.push(Cmd::Help),
             KeyCode::Char('l' | 'L') => self.cmds.push(Cmd::Houses),
             KeyCode::Char('t' | 'T') => self.cmds.push(Cmd::Scores),
+            KeyCode::Char('v' | 'V') | KeyCode::F(2) => self.cmds.push(Cmd::View),
             _ => {}
         }
     }

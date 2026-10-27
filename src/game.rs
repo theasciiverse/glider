@@ -1710,6 +1710,15 @@ impl Game {
         }
     }
 
+    /// Straight into a room, the glider at the top as a duct leaves it: for
+    /// looking at rooms (`--shot --room`), not part of the game.
+    pub fn warp(&mut self, room: i32) {
+        self.room_at = room.clamp(1, self.house.n_rooms.max(1));
+        self.ready_room();
+        self.place_glider(Rect::new(232, K_CEILING_VERT + 20, 280, K_CEILING_VERT + 40));
+        self.fx.clear();
+    }
+
     fn place_glider(&mut self, dest: Rect) {
         let g = &mut self.glider;
         g.dest = dest;

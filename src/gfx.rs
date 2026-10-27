@@ -29,6 +29,9 @@ pub struct Canvas {
     pub px: Vec<Rgb>,
     /// Drawing is limited to this rectangle (SetClip with a rectangle).
     pub clip: Rect,
+    /// When set, masked sprites are painted solid in this colour: the
+    /// silhouette view.
+    pub ink: Option<Rgb>,
 }
 
 /// The 50% gray pattern, $AA55...: set where x + y is even.
@@ -38,7 +41,7 @@ fn gray(x: i32, y: i32) -> bool {
 
 impl Canvas {
     pub fn new() -> Canvas {
-        Canvas { px: vec![WHITE; (W * H) as usize], clip: WHOLE }
+        Canvas { px: vec![WHITE; (W * H) as usize], clip: WHOLE, ink: None }
     }
 
     pub fn set(&mut self, x: i32, y: i32, c: Rgb) {
@@ -163,7 +166,8 @@ impl Canvas {
             for x in 0..dw {
                 let (sx, sy) = (x * src.width() / dw, y * src.height() / dh);
                 if a.mask_at(msk.left + sx, msk.top + sy) {
-                    self.set(dst.left + x, dst.top + y, a.objects.at(src.left + sx, src.top + sy));
+                    let c = self.ink.unwrap_or_else(|| a.objects.at(src.left + sx, src.top + sy));
+                    self.set(dst.left + x, dst.top + y, c);
                 }
             }
         }
@@ -203,6 +207,40 @@ impl Canvas {
     pub fn text(&mut self, f: &Font, s: &str, x: i32, y: i32, c: Rgb) {
         let bytes: Vec<u8> = s.bytes().collect();
         f.draw(&bytes, x, y, |px, py| self.set(px, py, c));
+    }
+}
+
+impl Canvas {
+    /// Blur with a (2r+1)-square box and scale the brightness by `k`: what
+    /// the silhouette view does to a room's background, so the wallpaper's
+    /// dithering and fine lines become calm shades.
+    pub fn soften(&mut self, r: i32, k: f32) {
+        let (w, h) = (W as usize, H as usize);
+        // summed-area table, one per channel
+        let mut sat = vec![[0u32; 3]; (w + 1) * (h + 1)];
+        for y in 0..h {
+            let mut row = [0u32; 3];
+            for x in 0..w {
+                let p = self.px[y * w + x];
+                for c in 0..3 {
+                    row[c] += p[c] as u32;
+                    sat[(y + 1) * (w + 1) + x + 1][c] = sat[y * (w + 1) + x + 1][c] + row[c];
+                }
+            }
+        }
+        for y in 0..H {
+            for x in 0..W {
+                let (x0, x1) = ((x - r).max(0) as usize, (x + r + 1).min(W) as usize);
+                let (y0, y1) = ((y - r).max(0) as usize, (y + r + 1).min(H) as usize);
+                let n = ((x1 - x0) * (y1 - y0)) as f32;
+                let mut out = [0u8; 3];
+                for c in 0..3 {
+                    let s = sat[y1 * (w + 1) + x1][c] + sat[y0 * (w + 1) + x0][c] - sat[y0 * (w + 1) + x1][c] - sat[y1 * (w + 1) + x0][c];
+                    out[c] = (s as f32 / n * k).min(255.0) as u8;
+                }
+                self.px[(y * W + x) as usize] = out;
+            }
+        }
     }
 }
 

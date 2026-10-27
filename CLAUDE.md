@@ -79,15 +79,32 @@ moving the mouse over the room switches to Glider's absolute mouse control
 - System font (Chicago) text is drawn with family 16 instead: Chicago is not in
   Glider.r.
 
-## Graphics direction (open, David 2026-10-27)
+## Views (2026-10-27)
 
-David asked about box-drawing ("pipe") and half-pipe characters mixed with Braille,
-and a silhouette style. Not decided; see the conversation's proposal: geometry-drawn
-furniture as box-drawing, sprites in Braille, as a second view to compare.
+Two looks, V switches, saved in glider.cfg (`--silhouette`, `--original`):
+
+- **Original**: Calhoun's art in half blocks, each terminal pixel the average of
+  the Mac pixels under it; the headline bar drawn as on the Mac.
+- **Silhouette** (default), asked for by David: the room's background (with stairs
+  and paintings) blurred and dimmed (`Canvas::soften`), so the dithered wallpaper
+  stops being noise; tables, shelves, cabinets, windows and mirrors flat, with their
+  edges in box-drawing characters over the picture (heavy bars and posts, light
+  outlines, half lines only where a bar or post ends mid-cell; never over anything
+  that moves); everything that moves or hurts (glider, darts, 'copters, balloons,
+  band, flames, sparks, toast, fish, ball) a solid silhouette in a colour by role
+  (`draw::ink`); the house's own objects (books, clocks, batteries, vents, switches)
+  keep their art, since flattened they stop saying what they are (tried first: books
+  became a red slab, the clock a yellow square). Drawn in Braille cells (AQuest's
+  Mixed method, brightest pixel per dot); the headline's figures go to the status
+  line as text.
 
 ## Glider PRO (separate title, not started)
 
-David wants a separate port of Glider PRO via elasota/Aerofoil too. Research
+David wants a separate port of Glider PRO via elasota/Aerofoil too. Name: David
+suggested Aerofoil; recommended instead (2026-10-27, not decided): "Glider PRO", the
+original's own name, as "Glider" here, crediting Aerofoil as the source, since
+Aerofoil is Eric Lasota's name for his own maintained port. Who holds the "Glider
+PRO" trademark was not found. Research
 2026-10-27: Glider PRO is GPL-2.0 (Calhoun's repo, code and data; Aerofoil says
 "or later"); C, 46k lines; Aerofoil C++ `GpApp/` about 33.6k lines of gameplay;
 houses BinHex, room 512x322, flat big-endian data fork (866 + 348 x rooms). No
@@ -99,7 +116,7 @@ terminal port found.
 cargo run --release                      # title screen, The House
 cargo run --release -- "Mad House"       # a built-in house; --houses lists them
 cargo run --release -- --watch "Hands-off House"
-cargo run --release -- --shot 60 --size 128x44   # a frame as ANSI, no terminal
+cargo run --release -- --shot 30 --room 3 --size 128x44   # a frame as ANSI, no terminal
 RUST_LOG=debug cargo run --release 2>glider.log
 cargo test --release
 ```

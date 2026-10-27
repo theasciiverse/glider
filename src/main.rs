@@ -13,6 +13,7 @@ mod tests;
 mod view;
 
 use assets::Assets;
+use draw::Look;
 use audio::Audio;
 use fx::Show;
 use game::{Controls, Fx, Game, Method};
@@ -50,12 +51,14 @@ usage: glider [options] [HOUSE]
   --mute          no sound
   --watch         no controls: for houses that play themselves
                   (Hands-off House)
+  --silhouette    the silhouette view (Braille shapes, box-drawn furniture)
+  --original      Calhoun's art in half blocks
   --version       print the version
 
 Keys: left and right (arrows, or , and .) fly; Up or Enter burns battery;
 Space or Down fires a rubber band. Or steer with the mouse: left or right
 of the room's middle, the button boosts. Tab pauses, M sound, B music,
-Q ends the game.
+Q ends the game. V switches between the two views.
 
 Logging: RUST_LOG=debug glider 2>glider.log";
 
@@ -81,6 +84,7 @@ struct App {
     house: House,
     game: Option<Game>,
     room_pic: Canvas,
+    look: Look,
     shown: Canvas,
     shows: Vec<Show>,
     paused: bool,
@@ -129,7 +133,7 @@ impl App {
             self.audio.play(s);
         }
         if g.room_dirty {
-            self.room_pic = draw::room_picture(&self.a, g);
+            self.room_pic = draw::room_picture(&self.a, g, self.look);
             g.room_dirty = false;
         }
         let fxs: Vec<Fx> = g.fx.drain(..).collect();
@@ -137,13 +141,14 @@ impl App {
             return;
         }
         let mut still = self.room_pic.clone();
-        draw::headline(&mut still, &self.a, g);
+        if self.look == Look::Original {
+            draw::headline(&mut still, &self.a, g);
+        }
         let score = g.score();
         for f in fxs {
             log::info!("fx {f:?}");
-            let from = self.shows.last().map_or_else(|| self.shown.clone(), |s| s.canvas.clone());
             // a show waiting behind another starts from where that one ends
-            let from = if self.shows.is_empty() { from } else { self.final_of_last().unwrap_or(from) };
+            let from = self.final_of_last().unwrap_or_else(|| self.shown.clone());
             self.shows.push(Show::new(f, &self.a, from, still.clone(), score, seed_now()));
         }
     }
@@ -156,7 +161,9 @@ impl App {
             Fx::TimeBonus(_) => s.canvas.clone(),
             _ => {
                 let mut c = self.room_pic.clone();
-                if let Some(g) = &self.game {
+                if let Some(g) = &self.game
+                    && self.look == Look::Original
+                {
                     draw::headline(&mut c, &self.a, g);
                 }
                 c
@@ -211,7 +218,7 @@ impl App {
         self.after_step();
         if let Some(g) = &self.game {
             if self.shows.is_empty() {
-                self.shown = draw::scene(&self.a, g, &self.room_pic);
+                self.shown = draw::scene(&self.a, g, &self.room_pic, self.look);
             }
             if !g.playing && self.shows.is_empty() {
                 self.game_over();
@@ -264,6 +271,10 @@ impl App {
                 Cmd::Music => {
                     self.audio.music = !self.audio.music;
                     self.settings.music = self.audio.music;
+                    continue;
+                }
+                Cmd::View => {
+                    self.set_look(if self.look == Look::Original { Look::Silhouette } else { Look::Original });
                     continue;
                 }
                 _ => {}
@@ -386,6 +397,43 @@ impl App {
         let _ = now;
     }
 
+    fn set_look(&mut self, look: Look) {
+        log::info!("view {look:?}");
+        self.look = look;
+        self.settings.silhouette = look == Look::Silhouette;
+        if let Some(g) = &self.game {
+            self.room_pic = draw::room_picture(&self.a, g, look);
+            if self.shows.is_empty() {
+                self.shown = draw::scene(&self.a, g, &self.room_pic, look);
+            }
+        }
+    }
+
+    /// Everything that moves, for keeping the edge overlay off it.
+    fn movers(&self) -> Vec<house::Rect> {
+        let Some(g) = &self.game else { return Vec::new() };
+        let mut m = vec![g.glider.dest.inset_by(-4, -4), g.glider.dest.offset_by(-32, -32)];
+        m.extend(g.animates.iter().filter(|a| !a.unseen).map(|a| a.dest));
+        if g.band_borne {
+            m.push(g.band.dest);
+        }
+        m.extend(g.cycles.iter().filter(|c| c.tied_to > 0).map(|c| g.event_rect[c.tied_to].union(&c.whole)));
+        m
+    }
+
+    /// Picture to cells in the current view.
+    fn present(&self, buf: &mut Buffer, c: &Canvas, placed: &view::Placed, edges: bool) {
+        match self.look {
+            Look::Original => view::draw(buf, c, placed),
+            Look::Silhouette => {
+                view::draw_braille(buf, c, placed);
+                if edges && let Some(g) = &self.game {
+                    view::draw_edges(buf, placed, &draw::edges(g), &self.movers());
+                }
+            }
+        }
+    }
+
     fn set_method(&mut self, m: Method) {
         if let Some(g) = &mut self.game
             && g.method != m
@@ -436,19 +484,21 @@ impl App {
         let status_y = placed.cells.bottom().min(area.bottom().saturating_sub(1));
         match self.screen {
             Screen::Title | Screen::Playing if !self.shows.is_empty() || self.screen == Screen::Playing => {
-                view::draw(buf, &self.shown, &placed);
+                self.present(buf, &self.shown, &placed, self.shows.is_empty() && self.game.is_some());
                 if text_rows > 0 {
                     let line = if self.paused {
-                        "Paused.  Tab or Enter to fly on, Q to end the game".to_string()
+                        "Paused.  Tab or Enter to fly on, Q to end the game, V view".to_string()
                     } else if let Some(g) = &self.game {
-                        format!(
-                            "{}  room {} of {}   Tab pause  M sound {}  B music {}",
-                            self.house_label(),
-                            g.room_at.max(0),
-                            g.house.n_rooms,
-                            on_off(self.audio.sound),
-                            on_off(self.audio.music)
-                        )
+                        let gl = &g.glider;
+                        let mut s = format!("{}  {}   score {}   gliders {}", mac::mac_roman(&g.room().name), g.rooms_passed.max(0), g.roll_score, (g.mortals - 1).max(0));
+                        if gl.bands > 0 {
+                            s += &format!("   bands {}", gl.bands);
+                        }
+                        if gl.energy > 0 {
+                            s += &format!("   battery {}", gl.energy);
+                        }
+                        s += "     Tab pause  V view";
+                        s
                     } else {
                         String::new()
                     };
@@ -463,7 +513,7 @@ impl App {
                 view::draw(buf, &self.title_picture(), &placed);
                 if text_rows > 0 {
                     let s = format!(
-                        "{}   Enter fly  L house  T scores  ? help  M sound {}  B music {}  Q quit",
+                        "{}   Enter fly  L house  T scores  ? help  V view  M sound {}  B music {}  Q quit",
                         self.house_label(),
                         on_off(self.audio.sound),
                         on_off(self.audio.music)
@@ -608,6 +658,7 @@ fn main() -> io::Result<()> {
         house,
         game: None,
         room_pic: Canvas::new(),
+        look: if settings.silhouette { Look::Silhouette } else { Look::Original },
         shown: Canvas::new(),
         shows: Vec::new(),
         paused: false,
@@ -627,6 +678,12 @@ fn main() -> io::Result<()> {
     };
     app.shown = app.title_picture();
     let _ = app.seed;
+    if has("--original") {
+        app.look = Look::Original;
+    }
+    if has("--silhouette") {
+        app.look = Look::Silhouette;
+    }
 
     if let Some(n) = value("--shot").and_then(|v| v.parse::<u32>().ok()) {
         shot(&mut app, n, value("--size"));
@@ -665,6 +722,9 @@ fn shot(app: &mut App, steps: u32, size: Option<String>) {
     let (w, h) = size.and_then(|v| v.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))).unwrap_or((128u16, 44u16));
     app.aspect = 2.0;
     app.start_game();
+    if let (Some(r), Some(g)) = (std::env::args().skip_while(|a| a != "--room").nth(1).and_then(|v| v.parse().ok()), &mut app.game) {
+        g.warp(r);
+    }
     for _ in 0..steps {
         if let Some(g) = &mut app.game {
             if !g.playing {
@@ -674,14 +734,15 @@ fn shot(app: &mut App, steps: u32, size: Option<String>) {
             g.sounds.clear();
             g.fx.clear();
             if g.room_dirty {
-                app.room_pic = draw::room_picture(&app.a, g);
+                app.room_pic = draw::room_picture(&app.a, g, app.look);
                 g.room_dirty = false;
             }
         }
     }
     app.shows.clear();
     if let Some(g) = &app.game {
-        app.shown = draw::scene(&app.a, g, &app.room_pic);
+        app.room_pic = draw::room_picture(&app.a, g, app.look);
+        app.shown = draw::scene(&app.a, g, &app.room_pic, app.look);
     }
     let area = Rect::new(0, 0, w, h);
     let mut buf = Buffer::empty(area);
