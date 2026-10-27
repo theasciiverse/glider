@@ -7,7 +7,7 @@
 > ```
 >
 > Or download the archive for your system from this repository's Releases,
-> unpack it and run `./glider` (`glider.exe` on Windows).
+> unpack it and run `./glider`.
 >
 > The original README follows.
 
