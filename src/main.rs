@@ -107,7 +107,9 @@ fn seed_now() -> u32 {
 
 impl App {
     fn method(&self) -> Method {
-        if self.input.exact { Method::HoldKey } else { Method::DropKey }
+        // watching, nothing is held: no thrust, as a self-playing house needs
+        // (tap control would keep the glider flying where it faces)
+        if self.input.exact || self.watch { Method::HoldKey } else { Method::DropKey }
     }
 
     fn house_label(&self) -> String {

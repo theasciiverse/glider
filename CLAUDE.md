@@ -79,6 +79,20 @@ only over the value it was made for:
   `hands_off_deaths_by_room`, `sweep_ready_room_ticks`; `Game::frame_ticks` and
   `ready_room_ticks` for slower-Mac timing (defaults 2.0 and 0).
 
+## In the catalog (2026-10-27)
+
+- `hub/catalog/glider.toml` and `glider.md` (store page), genre arcade.
+- Preview: `asciiverse/glider.cast`, 100x30, 52 s, recorded by
+  `asciiverse/record-preview.sh`: `glider --watch "Hands-off House"` (it plays
+  itself), silhouette view, the original view from 20 s to 36 s; thumbnail at 12 s.
+  `--watch` uses hold control (no thrust when nothing is held); with tap control the
+  first recording lost a glider in seconds.
+- On the website mockup (`websites/Asciiverse`) with the NEW! banner
+  (`dev/mock-titles.toml`), the cast copied to `casts/glider.cast`, and the local
+  Linux build packaged by `dev/build_catalog.py` into
+  `dev-releases/glider-x86_64-unknown-linux-gnu.tar.gz` for av.
+- No GitHub release yet: the repo `theasciiverse/glider` does not exist yet.
+
 ## Known gaps (2026-10-27)
 
   `DISSOLVE_TICKS` = 12 is an estimate.
