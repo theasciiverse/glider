@@ -26,8 +26,6 @@ pub struct Assets {
     pub help: Vec<Image>,
     /// FONT 2060 (family 16 at 12 points), the game's small text.
     pub font: Font,
-    /// FONT 26144 (family 204 at 32 points), the final score.
-    pub big_font: Font,
     /// Sounds 1 to 30, from `snd ` 1001 to 1030.
     pub sounds: Vec<Option<Sound>>,
     /// STR# 131: the title screen's messages.
@@ -79,7 +77,6 @@ impl Assets {
             idle: pict(&app, 210),
             help: (1000..=1007).map(|id| pict(&app, id)).collect(),
             font: font(2060),
-            big_font: font(26144),
             sounds: (0..=30).map(|n| if n == 0 { None } else { snd.get(&(*b"snd ", 1000 + n)).and_then(|v| mac::snd(v)) }).collect(),
             demo_strings: strings(&app, 131),
         }

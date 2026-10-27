@@ -154,3 +154,17 @@ fn sweep_ready_room_ticks() {
         println!("frame_ticks {ft} ready_room_ticks {rr:2}: {}", results.join(" "));
     }
 }
+
+#[test]
+fn in_game_text_is_terminal_text() {
+    use ratatui::buffer::Buffer;
+    use ratatui::layout::Rect;
+    let a = Assets::load();
+    let show = crate::fx::Show::new(Fx::TimeBonus(192), &a, crate::gfx::Canvas::new(), crate::gfx::Canvas::new(), 0, 1);
+    let area = Rect::new(0, 0, 128, 44);
+    let p = crate::view::place(area, 2.0);
+    let mut buf = Buffer::empty(area);
+    crate::view::draw_labels(&mut buf, &p, &show.label().into_iter().collect::<Vec<_>>());
+    let text: String = (0..area.height).map(|y| (0..area.width).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect();
+    assert!(text.contains("Time Bonus = 192"), "{text}");
+}

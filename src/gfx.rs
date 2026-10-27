@@ -15,7 +15,6 @@ pub const WHITE: Rgb = [255, 255, 255];
 pub const YELLOW: Rgb = [255, 255, 0];
 pub const RED: Rgb = [255, 0, 0];
 pub const LT_BLUE: Rgb = [0, 255, 255];
-pub const BLUE: Rgb = [0, 0, 255];
 /// SetUpColors' RGB values, 16-bit, here as 8-bit.
 pub const BROWN: Rgb = [86, 44, 5];
 pub const LT_BROWN: Rgb = [144, 113, 58];

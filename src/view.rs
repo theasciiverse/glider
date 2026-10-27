@@ -293,3 +293,26 @@ pub fn draw_edges(buf: &mut Buffer, p: &Placed, edges: &[(crate::draw::Edge, Rgb
         }
     }
 }
+
+/// Labels as terminal text at their place over the picture.
+pub fn draw_labels(buf: &mut Buffer, p: &Placed, labels: &[crate::draw::Label]) {
+    let r = p.cells;
+    for l in labels {
+        let n = l.text.chars().count() as i32;
+        let mut cx = l.x * r.width as i32 / W;
+        if l.centred {
+            cx -= n / 2;
+        }
+        let cy = (l.y * r.height as i32 / H).clamp(0, r.height as i32 - 1);
+        let cx = cx.clamp(0, (r.width as i32 - n).max(0));
+        for (i, ch) in l.text.chars().enumerate() {
+            let x = cx + i as i32;
+            if x >= r.width as i32 {
+                break;
+            }
+            let cell = &mut buf[(r.x + x as u16, r.y + cy as u16)];
+            let bg = l.bg.map(rgb).unwrap_or(cell.bg);
+            cell.set_char(ch).set_fg(rgb(l.fg)).set_bg(bg).set_style(ratatui::style::Modifier::BOLD);
+        }
+    }
+}

@@ -590,21 +590,42 @@ pub fn scene(a: &Assets, g: &Game, room: &Canvas, look: Look) -> Canvas {
     if g.band_borne {
         sprite(&mut c, a, look, ink::BAND, band_rct(g.band.phase), g.band.dest);
     }
-    if let Some(f) = &g.float_points {
-        let col = if f.fresh {
-            YELLOW
-        } else if g.binary_flip == 0 {
-            gfx::BLUE
-        } else {
-            RED
-        };
-        c.text(&a.font, &f.says, f.where_r.left, f.where_r.bottom - 2, col);
-    }
     // the silhouette view shows the headline's figures as terminal text
     if look == Look::Original {
         headline(&mut c, a, g);
     }
     c
+}
+
+/// Text over the picture, drawn as terminal text rather than in the
+/// picture: at terminal sizes the Mac's 12-point letters are a smudge.
+/// (x, y) is in the room, y the middle of the line.
+#[derive(Clone, Debug)]
+pub struct Label {
+    pub x: i32,
+    pub y: i32,
+    pub text: String,
+    pub fg: [u8; 3],
+    /// Its own background, or the picture's.
+    pub bg: Option<[u8; 3]>,
+    pub centred: bool,
+}
+
+/// The game's labels: the points floating up from a prize, yellow at
+/// first, then blinking blue and red as FloatTheScore and DrawCScene do.
+pub fn labels(g: &Game) -> Vec<Label> {
+    let mut out = Vec::new();
+    if let Some(f) = &g.float_points {
+        let fg = if f.fresh {
+            YELLOW
+        } else if g.binary_flip == 0 {
+            [100, 150, 255]
+        } else {
+            RED
+        };
+        out.push(Label { x: f.where_r.left, y: f.where_r.bottom - 6, text: f.says.clone(), fg, bg: None, centred: false });
+    }
+    out
 }
 
 /// A box of the headline bar: erased, framed, shadowed, then inverted

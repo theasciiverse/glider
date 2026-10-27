@@ -52,6 +52,7 @@ const SPELL: [usize; 8] = [0, 1, 2, 3, 4, 5, 3, 6];
 
 pub struct Show {
     pub kind: Fx,
+    score: i64,
     t: i32,
     from: Canvas,
     to: Canvas,
@@ -70,15 +71,11 @@ impl Show {
     /// `from` is the picture on the screen now, `to` what the transition
     /// brings in (the new room's still picture for scrolls and dissolves).
     pub fn new(kind: Fx, a: &Assets, from: Canvas, to: Canvas, score: i64, seed: u32) -> Show {
-        let mut canvas = from.clone();
+        let canvas = from.clone();
         let mut to = to;
         match &kind {
-            Fx::TimeBonus(b) => {
-                let r = R(190, 100, 312, 117);
-                canvas.fill(r, BLACK);
-                canvas.frame(r.inset_by(1, 1), WHITE);
-                canvas.text(&a.font, &format!("Time Bonus = {b}"), r.left + 3, r.bottom - 4, YELLOW);
-            }
+            // its box, (190, 100, 312, 117), is the label's
+            Fx::TimeBonus(_) => {}
             Fx::Closing => {
                 to = Canvas::new();
                 to.copy_bits(&a.farm, R(0, 0, 512, 342), R(0, 0, 512, 342));
@@ -86,12 +83,12 @@ impl Show {
             Fx::GameOver => {
                 to = Canvas::new();
                 to.fill(R(0, 0, 512, 342), BLACK);
-                to.text(&a.big_font, &score.to_string(), 120, 80, YELLOW);
             }
             _ => {}
         }
         Show {
             kind,
+            score,
             t: 0,
             from,
             to,
@@ -109,6 +106,20 @@ impl Show {
         self.seed = ((self.seed as u64 * 16807) % 0x7FFF_FFFF) as u32;
         let r = (self.seed as u16 as i16 as i32).abs();
         (r as i64 * range as i64 / 32768) as i32
+    }
+
+    /// Its text, shown as terminal text over the picture: the time bonus
+    /// in its black box, and GameOver's score (drawn at (120, 80) in the
+    /// 32-point font on the Mac), once the dissolve has brought it in.
+    pub fn label(&self) -> Option<crate::draw::Label> {
+        use crate::draw::Label;
+        match self.kind {
+            Fx::TimeBonus(b) => Some(Label { x: 251, y: 108, text: format!(" Time Bonus = {b} "), fg: YELLOW, bg: Some(BLACK), centred: true }),
+            Fx::GameOver if self.t > crate::game::DISSOLVE_TICKS as i32 / 2 => {
+                Some(Label { x: 120, y: 68, text: self.score.to_string(), fg: YELLOW, bg: None, centred: false })
+            }
+            _ => None,
+        }
     }
 
     /// How long it lasts, in ticks.

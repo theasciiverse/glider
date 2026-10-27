@@ -29,8 +29,7 @@ The game reads Calhoun's files directly, at start-up, nothing extracted:
   `FONT`s, MacRoman.
 - `src/assets.rs`: Color Art PICT 128 (sprites), 129 (masks, incl. the dithered fade
   masks), 130 (farm), 198/199 (stairs), 200 to 209 (backgrounds); Glider.r PICT 210
-  (title screen), 1000 to 1007 (help pages), FONT 2060 (family 16, 12 pt) and 26144
-  (family 204, 32 pt); `snd ` 1001 to 1030 = the game's sounds 1 to 30.
+  (title screen), 1000 to 1007 (help pages), FONT 2060 (family 16, 12 pt); `snd ` 1001 to 1030 = the game's sounds 1 to 30.
 - `src/house.rs`: the house format (`houseRec`, 13830 bytes: 1270-byte header, 40
   rooms of 314; Mac `Rect`s stored top, left, bottom, right). Built-in houses are
   `include_bytes!`; any Glider 4 house file can be played from disk
@@ -97,6 +96,12 @@ Two looks, V switches, saved in glider.cfg (`--silhouette`, `--original`):
   became a red slab, the clock a yellow square). Drawn in Braille cells (AQuest's
   Mixed method, brightest pixel per dot); the headline's figures go to the status
   line as text.
+
+In both views, text that appears during play is terminal text over the picture, not
+the Mac's 12-point letters, which are a smudge at terminal sizes (David, 2026-10-27):
+the time bonus box, the points floating up from a prize, the final score on the
+GAME OVER screen (`draw::Label`, `Show::label`, `view::draw_labels`). The GAME
+OVER letters stay art. The Original view's headline bar is still drawn as on the Mac.
 
 ## Glider PRO (separate title, not started)
 

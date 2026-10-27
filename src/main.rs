@@ -485,6 +485,12 @@ impl App {
         match self.screen {
             Screen::Title | Screen::Playing if !self.shows.is_empty() || self.screen == Screen::Playing => {
                 self.present(buf, &self.shown, &placed, self.shows.is_empty() && self.game.is_some());
+                let labels = match (self.shows.first(), &self.game) {
+                    (Some(s), _) => s.label().into_iter().collect(),
+                    (None, Some(g)) => draw::labels(g),
+                    _ => Vec::new(),
+                };
+                view::draw_labels(buf, &placed, &labels);
                 if text_rows > 0 {
                     let line = if self.paused {
                         "Paused.  Tab or Enter to fly on, Q to end the game, V view".to_string()
