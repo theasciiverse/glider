@@ -13,7 +13,8 @@ glider flying through the rooms of a house. Rust + Ratatui. Started 2026-10-27.
   and Glass House, others named in their Read Me files); Calhoun published them in
   the MIT repo.
 - That repo is this one's `upstream` remote; our history continues on top of his
-  (branch `main`). No `origin` yet: the theasciiverse repo has not been created.
+  (branch `main`). `origin` is github.com/theasciiverse/glider (private, created
+  2026-10-27).
 - The `.p` files use classic Mac CR line endings, so `wc -l` says 0. Read them with
   `tr '\r' '\n'`.
 - No terminal port existed (searched GitHub and the web 2026-10-27). Known ports: a
@@ -102,7 +103,8 @@ only over the value it was made for:
   (`dev/mock-titles.toml`), the cast copied to `casts/glider.cast`, and the local
   Linux build packaged by `dev/build_catalog.py` into
   `dev-releases/glider-x86_64-unknown-linux-gnu.tar.gz` for av.
-- No GitHub release yet: the repo `theasciiverse/glider` does not exist yet.
+- No GitHub release yet (the repo `theasciiverse/glider` exists since 2026-10-27;
+  no release built).
 
 ## Known gaps (2026-10-27)
 
