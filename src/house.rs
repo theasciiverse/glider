@@ -217,6 +217,48 @@ pub const BUILT_IN: &[(&str, &[u8])] = houses![
     "Usher House",
 ];
 
+/// A change to a built-in house so it plays well here. Glider here keeps
+/// the game's own 2 ticks a frame; some houses were tuned on slower Macs,
+/// where a frame took longer, and their tick-counted timers (toasters,
+/// outlets, fish) no longer meet the glider where their authors meant.
+/// Each patch moves one timer into the middle of the range that works,
+/// found by playing the house through (`search_hands_off_patch`).
+struct Patch {
+    house: &'static str,
+    room: usize,
+    /// 1-based, as in the Room Editor.
+    object: usize,
+    extra: bool,
+    from: i32,
+    to: i32,
+}
+
+const PATCHES: &[Patch] = &[
+    // Hands-off House plays itself; without these it loses gliders
+    // room 7, '. . . junior birdman.': the toaster's wait between launches
+    // (40 to 65 work)
+    Patch { house: "Hands-off House", room: 7, object: 7, extra: true, from: 30, to: 50 },
+    // room 13, 'Shockproof!': the middle outlet's pause between sparks
+    // (150 and up work); Ward Hartenstein fixed this room once himself, by
+    // the left outlet's delay
+    Patch { house: "Hands-off House", room: 13, object: 12, extra: false, from: 65, to: 175 },
+    // room 17, 'Zig-zag 3': the fish's wait between jumps (80 to 95 work)
+    Patch { house: "Hands-off House", room: 17, object: 13, extra: true, from: 60, to: 88 },
+];
+
+fn patch(name: &str, h: &mut House) {
+    for p in PATCHES.iter().filter(|p| p.house == name) {
+        let Some(o) = h.rooms.get_mut(p.room).and_then(|r| r.objects.get_mut(p.object - 1)) else { continue };
+        let field = if p.extra { &mut o.extra } else { &mut o.amount };
+        // only over the value it was made for
+        if *field == p.from {
+            *field = p.to;
+        } else {
+            log::warn!("{name} room {} object {}: patch for {} found {}", p.room, p.object, p.from, field);
+        }
+    }
+}
+
 /// Where houses come from: the built-in ones, and a folder for others (the
 /// folder of a house file opened from disk, so its next files are found
 /// beside it, as on the Mac).
@@ -234,7 +276,10 @@ impl Library {
                 return House::parse(&d);
             }
         }
-        BUILT_IN.iter().find(|(n, _)| n.as_bytes() == name || *n == text).and_then(|(_, d)| House::parse(d))
+        let (n, d) = BUILT_IN.iter().find(|(n, _)| n.as_bytes() == name || *n == text)?;
+        let mut h = House::parse(d)?;
+        patch(n, &mut h);
+        Some(h)
     }
 
     /// A house file from disk; the library then looks beside it first.
