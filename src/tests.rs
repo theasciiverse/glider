@@ -181,6 +181,137 @@ fn in_game_text_is_terminal_text() {
     assert!(text.contains("Time Bonus = 192"), "{text}");
 }
 
+/// In the silhouette view a 'copter's two-pixel blades stay on screen,
+/// the area drawn near the sprite's own, and the glider's lower wing is
+/// its shade, not its ink.
+#[test]
+fn silhouettes_keep_thin_parts_and_shades() {
+    use crate::gfx::{Canvas, shade};
+    use crate::house::Rect as R;
+    use ratatui::buffer::Buffer;
+    use ratatui::style::Color;
+    let a = Assets::load();
+    let mut c = Canvas::new();
+    c.fill(crate::gfx::WHOLE, [150, 140, 120]);
+    c.fore = vec![None; c.px.len()];
+    let (copter, glider) = ([205, 205, 225], [250, 250, 255]);
+    c.ink = Some(copter);
+    c.sprite(&a, R::new(160, 0, 192, 32), R::new(194, 60, 226, 92));
+    c.ink = Some(glider);
+    c.sprite(&a, R::new(0, 0, 48, 20), R::new(300, 100, 348, 120));
+    c.ink = None;
+    let p = crate::view::place(ratatui::layout::Rect::new(0, 0, 128, 44), 2.0);
+    let mut buf = Buffer::empty(p.cells);
+    crate::view::draw_braille(&mut buf, &c, &p);
+    let (w, h) = (p.cells.width as i32, p.cells.height as i32);
+    let shows = |col: [u8; 3], x: i32, y: i32| {
+        let col = Color::Rgb(col[0], col[1], col[2]);
+        let cell = &buf[(p.cells.x + x as u16, p.cells.y + y as u16)];
+        (cell.symbol() != " " && cell.fg == col) || cell.bg == col
+    };
+    // the 'copter's area as drawn, in a cell's 8x16 points, against the
+    // sprite's own
+    let mut drawn = 0;
+    for y in 0..h {
+        for x in 0..w {
+            let cell = &buf[(p.cells.x + x as u16, p.cells.y + y as u16)];
+            let ch = cell.symbol().chars().next().unwrap_or(' ');
+            let n = crate::view::points(ch);
+            if cell.bg == Color::Rgb(copter[0], copter[1], copter[2]) {
+                drawn += 128 - n;
+            } else if cell.fg == Color::Rgb(copter[0], copter[1], copter[2]) {
+                drawn += n;
+            }
+        }
+    }
+    let pixels = (0..32).flat_map(|y| (0..32).map(move |x| (x, y))).filter(|&(x, y)| a.mask_at(160 + x, y)).count() as f32;
+    let area = pixels * 128.0 * (w * h) as f32 / (512.0 * 342.0);
+    assert!(drawn as f32 > area * 0.8, "the 'copter drawn {drawn} points, its sprite covers {area}");
+    let glider_has = |col| (100 * h / 342..120 * h / 342 + 1).any(|y| (300 * w / 512..348 * w / 512 + 1).any(|x| shows(col, x, y)));
+    assert!(glider_has(shade(glider)), "no shaded wing");
+    assert!(glider_has(glider), "no lit wing");
+}
+
+/// Room 1 of The House drawn in the silhouette view at 128x44, and the
+/// cells over the first object of `kind` in it.
+fn cells_over(kind: i32) -> Vec<ratatui::buffer::Cell> {
+    let lib = Library::default();
+    let h = lib.load(b"The House").unwrap();
+    let mut g = Game::new(lib, b"The House", h, Method::HoldKey, 1);
+    g.start(false);
+    let a = Assets::load();
+    let room = g.room().clone();
+    let b = room.objects[..room.n_objects as usize].iter().find(|o| o.kind == kind).expect("the object is in room 1").bound;
+    let c = draw::scene(&a, &g, &draw::room_picture(&a, &g, draw::Look::Silhouette), draw::Look::Silhouette);
+    let p = crate::view::place(ratatui::layout::Rect::new(0, 0, 128, 44), 2.0);
+    let mut buf = ratatui::buffer::Buffer::empty(p.cells);
+    crate::view::draw_braille(&mut buf, &c, &p);
+    let (w, h) = (p.cells.width as i32, p.cells.height as i32);
+    (b.top * h / 342..b.bottom * h / 342)
+        .flat_map(|y| (b.left * w / 512..b.right * w / 512).map(move |x| (x, y)))
+        .map(|(x, y)| buf[(p.cells.x + x as u16, p.cells.y + y as u16)].clone())
+        .collect()
+}
+
+fn braille(c: &ratatui::buffer::Cell) -> bool {
+    c.symbol().chars().any(|ch| ('\u{2800}'..='\u{28FF}').contains(&ch))
+}
+
+fn shows(cells: &[ratatui::buffer::Cell], col: [u8; 3]) -> bool {
+    let col = ratatui::style::Color::Rgb(col[0], col[1], col[2]);
+    cells.iter().any(|c| c.bg == col || (c.fg == col && c.symbol() != " "))
+}
+
+/// The clock in The House's first room, in the silhouette view: drawn in
+/// solid characters (no Braille) showing its yellow rim, white face and
+/// black hands.
+#[test]
+fn the_clock_reads_as_a_clock() {
+    let cells = cells_over(crate::game::CLOCK);
+    assert!(!cells.iter().any(braille), "Braille in the clock");
+    for (name, col) in [("rim", [252, 243, 5]), ("face", [255, 255, 255]), ("hands", [0, 0, 0])] {
+        assert!(shows(&cells, col), "no {name}");
+    }
+}
+
+/// The Mac beside it is drawn by the same matcher in its art's colours,
+/// its blue screen and gray case; in Braille it was a yellow smear.
+#[test]
+fn the_mac_is_drawn_in_its_colours() {
+    let cells = cells_over(crate::game::MAC_TSH);
+    assert!(!cells.iter().any(braille), "Braille in the Mac");
+    assert!(shows(&cells, [2, 171, 234]), "no screen");
+    assert!(shows(&cells, [192, 192, 192]), "no case");
+}
+
+/// GameOver in the silhouette view: the letters crisp and purple, not
+/// Braille, and once the word has fallen, no crumbs of its earlier
+/// rows left in the pile of pages above it.
+#[test]
+fn game_over_letters_are_sharp() {
+    let lib = Library::default();
+    let h = lib.load(b"The House").unwrap();
+    let mut g = Game::new(lib, b"The House", h, Method::HoldKey, 1);
+    g.start(false);
+    let a = Assets::load();
+    let c = draw::scene(&a, &g, &draw::room_picture(&a, &g, draw::Look::Silhouette), draw::Look::Silhouette);
+    let mut show = crate::fx::Show::new(Fx::GameOver, &a, c, crate::gfx::Canvas::new(), 0, 7);
+    while !show.tick(&a, &mut Vec::new()) {}
+    let p = crate::view::place(ratatui::layout::Rect::new(0, 0, 128, 44), 2.0);
+    let mut buf = ratatui::buffer::Buffer::empty(p.cells);
+    crate::view::draw_braille(&mut buf, &show.canvas, &p);
+    let cells: Vec<_> = buf.content().to_vec();
+    let ink = ratatui::style::Color::Rgb(70, 0, 165);
+    let letters: Vec<_> = cells.iter().filter(|c| c.fg == ink || c.bg == ink).collect();
+    // a stroke's tip may be a single Braille dot; in Braille, every cell was
+    let dotted = letters.iter().filter(|c| braille(c)).count();
+    assert!(dotted * 10 < letters.len(), "{dotted} of {} letter cells in Braille", letters.len());
+    let rows: Vec<u16> = (0..p.cells.height).filter(|&y| (0..p.cells.width).any(|x| buf[(p.cells.x + x, p.cells.y + y)].fg == ink || buf[(p.cells.x + x, p.cells.y + y)].bg == ink)).collect();
+    assert!(!rows.is_empty(), "no letters");
+    // the last row's letters are 45 pixels tall: about six cells, nothing above
+    assert!(rows.last().unwrap() - rows[0] <= 7, "letters spread over rows {rows:?}");
+}
+
 /// A developer's tool: Hands-off House with a thousand gliders at each
 /// speed, listing the rooms where gliders were lost and how many.
 #[test]

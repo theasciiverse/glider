@@ -304,6 +304,18 @@ fn keeps_art(kind: i32) -> bool {
     )
 }
 
+/// Of those, the ones the silhouette view draws through its cell matcher
+/// in their own colours, which suits art in flat areas of colour (the Mac
+/// was a yellow smear in Braille). The rest stay in Braille, whose brightest
+/// dot keeps a small bright detail on a dark body: a battery's orange label,
+/// the green lettering on the rubber bands, a candle's brass. The books are
+/// fine as they are (David, 2026-10-27); the toaster, shredder and light
+/// switch came out worse in flat colour (gray rubble, noisy teeth, a lever
+/// like a "1"). Compared object by object, in rooms of The House.
+fn sharp_art(kind: i32) -> bool {
+    matches!(kind, MAC_TSH | TEA_KTL | FSH_BWL | GUITAR | PWR_SWT | THERMO | FLR_VNT | CEL_VNT | CEL_DCT | DRIP)
+}
+
 /// An object's silhouette colour.
 pub fn ink_for(kind: i32) -> [u8; 3] {
     match kind {
@@ -350,6 +362,10 @@ fn sprite(c: &mut Canvas, a: &Assets, look: Look, col: [u8; 3], src: Rect, dst: 
 /// A room object: its art, or (if it is not one of the house's own
 /// things) its silhouette.
 fn object(c: &mut Canvas, a: &Assets, look: Look, kind: i32, src: Rect, dst: Rect) {
+    if keeps_art(kind) && sharp_art(kind) && look == Look::Silhouette {
+        c.art(a, src, dst);
+        return;
+    }
     let look = if keeps_art(kind) { Look::Original } else { look };
     sprite(c, a, look, ink_for(kind), src, dst);
 }
@@ -360,6 +376,41 @@ fn flat_table(c: &mut Canvas, a: &Assets, r: Rect) {
     c.line(mid - 2, r.bottom, mid - 2, K_FLOOR_VERT - 7, 5, 1, ink::WOOD);
     let s = src_rect(TABLE);
     sprite(c, a, Look::Silhouette, ink::WOOD, s, s.at(mid - 31, K_FLOOR_VERT - 7));
+}
+
+/// The clock as the silhouette view draws it: its art's shapes in plain
+/// colours, a yellow rim and bells, a white face, black hands and feet
+/// thick enough to stay at terminal sizes. Drawn from the art, the shaded
+/// rim and one-pixel hands were a tangle (David: "a ball of yarn").
+fn flat_clock(c: &mut Canvas, r: Rect) {
+    const RIM: [u8; 3] = [252, 243, 5];
+    let before = c.px.clone();
+    // the art is 32x29: its coordinates, scaled to `r`
+    let (sx, sy) = (r.width() as f32 / 32.0, r.height() as f32 / 29.0);
+    let at = |x: f32, y: f32| (r.left + (x * sx) as i32, r.top + (y * sy) as i32);
+    let disc = |c: &mut Canvas, cx: f32, cy: f32, rad: f32, col: [u8; 3]| {
+        for y in r.top..r.bottom {
+            for x in r.left..r.right {
+                let (dx, dy) = ((x - r.left) as f32 + 0.5 - cx * sx, (y - r.top) as f32 + 0.5 - cy * sy);
+                if (dx / sx).powi(2) + (dy / sy).powi(2) <= rad * rad {
+                    c.set(x, y, col);
+                }
+            }
+        }
+    };
+    let line = |c: &mut Canvas, a: (f32, f32), b: (f32, f32)| {
+        let ((x0, y0), (x1, y1)) = (at(a.0, a.1), at(b.0, b.1));
+        c.line(x0, y0, x1, y1, 2, 2, BLACK);
+    };
+    line(c, (9.0, 22.0), (7.0, 27.0));
+    line(c, (22.0, 22.0), (24.0, 27.0));
+    disc(c, 6.0, 4.5, 3.5, RIM);
+    disc(c, 25.5, 4.5, 3.5, RIM);
+    disc(c, 15.5, 13.5, 11.5, RIM);
+    disc(c, 15.5, 13.5, 8.0, WHITE);
+    line(c, (15.0, 13.0), (15.0, 7.0));
+    line(c, (15.0, 13.0), (19.0, 17.0));
+    c.keep_changes(&before, r);
 }
 
 fn flat_shelf(c: &mut Canvas, a: &Assets, r: Rect) {
@@ -387,6 +438,9 @@ fn flat_window(c: &mut Canvas, o: &Object) {
 /// ArrangeTiles and DrawAllObjects.
 pub fn room_picture(a: &Assets, g: &Game, look: Look) -> Canvas {
     let mut c = Canvas::new();
+    if look == Look::Silhouette {
+        c.fore = vec![None; c.px.len()];
+    }
     let room = g.room();
     let objects = &room.objects[..room.n_objects as usize];
     if g.lights_out {
@@ -441,6 +495,11 @@ pub fn room_picture(a: &Assets, g: &Game, look: Look) -> Canvas {
                     object(&mut c, a, look, 59, src_rect(59), b);
                 }
             }
+            CLOCK if flat => {
+                if o.amount > 0 {
+                    flat_clock(&mut c, o.bound);
+                }
+            }
             CLOCK | PAPER | BATTRY | RBR_BND => {
                 if o.amount > 0 {
                     object(&mut c, a, look, o.kind, s, o.bound);
@@ -453,6 +512,11 @@ pub fn room_picture(a: &Assets, g: &Game, look: Look) -> Canvas {
             DN_STAR => c.copy_bits(&a.stair_down, R(0, 0, a.stair_down.w, a.stair_down.h), o.bound),
             _ => {}
         }
+    }
+    // what a later object covers (a clock's feet behind the table top) is
+    // no longer the clock's
+    for (f, &p) in c.fore.iter_mut().zip(&c.px) {
+        *f = f.filter(|f| f.0 == p);
     }
     c
 }
@@ -532,6 +596,9 @@ fn draw_glider(c: &mut Canvas, a: &Assets, look: Look, g: &Game, dest: Rect) {
 /// One frame: the room picture with everything that moves on it.
 pub fn scene(a: &Assets, g: &Game, room: &Canvas, look: Look) -> Canvas {
     let mut c = room.clone();
+    if look == Look::Silhouette && c.fore.is_empty() {
+        c.fore = vec![None; c.px.len()];
+    }
     let l = &g.lightning;
     if !g.window_rgn.is_empty() && (l.what_phase == 1 || l.what_phase == 3) {
         // XORed twice and once more: the bolt shows on phases 1 and 3

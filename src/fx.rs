@@ -47,6 +47,11 @@ const LETTERS: [Rect; 7] = [
     R(375, 253, 409, 298),
     R(375, 297, 409, 342),
 ];
+/// The letters' purple, and the gray of a page's top edge in the
+/// silhouette view.
+const INK: [u8; 3] = [70, 0, 165];
+const EDGE: [u8; 3] = [120, 120, 140];
+
 /// G a m e O v e r
 const SPELL: [usize; 8] = [0, 1, 2, 3, 4, 5, 3, 6];
 
@@ -65,12 +70,22 @@ pub struct Show {
     bolt: Option<Vec<(i32, i32)>>,
     // GameOver's falling row
     row: Rect,
+    /// In the silhouette view (the picture it starts from has `fore`): the
+    /// letters are drawn simplified, as sharp shapes.
+    sharp: bool,
 }
 
 impl Show {
     /// `from` is the picture on the screen now, `to` what the transition
     /// brings in (the new room's still picture for scrolls and dissolves).
     pub fn new(kind: Fx, a: &Assets, from: Canvas, to: Canvas, score: i64, seed: u32) -> Show {
+        let mut from = from;
+        let sharp = !from.fore.is_empty();
+        // the silhouettes would stay put while the picture moves under them;
+        // only the time bonus leaves the picture as it is
+        if !matches!(kind, Fx::TimeBonus(_)) {
+            from.fore.clear();
+        }
         let canvas = from.clone();
         let mut to = to;
         match &kind {
@@ -99,6 +114,7 @@ impl Show {
             tiny: R(420, 90, 441, 100),
             bolt: None,
             row: Rect::default(),
+            sharp,
         }
     }
 
@@ -152,6 +168,33 @@ impl Show {
         }
         if step >= of {
             self.canvas = self.to.clone();
+        }
+    }
+
+    /// GameOver's letter `n` (of LETTERS) at `dst`. The silhouette view
+    /// draws its sheet of notebook paper plain: a white page with its top
+    /// edge in gray, so the melting pile reads as a stack of pages. The
+    /// rules, margin, punched holes and black sides were noise at terminal
+    /// sizes, the pile a speckled slab.
+    fn letter(&mut self, a: &Assets, n: usize, dst: Rect) {
+        let src = LETTERS[n];
+        if !self.sharp {
+            self.canvas.copy_bits(&a.objects, src, dst);
+            return;
+        }
+        if self.canvas.fore.is_empty() {
+            self.canvas.fore = vec![None; self.canvas.px.len()];
+        }
+        for y in 0..dst.height() {
+            for x in 0..dst.width() {
+                let (sx, sy) = (x * src.width() / dst.width(), y * src.height() / dst.height());
+                let col = match a.objects.at(src.left + sx, src.top + sy) {
+                    INK => INK,
+                    _ if sy <= 1 => EDGE,
+                    _ => WHITE,
+                };
+                self.canvas.put(dst.left + x, dst.top + y, col);
+            }
         }
     }
 
@@ -233,7 +276,7 @@ impl Show {
                         let n = (k / 6) as usize;
                         sounds.push(snd::SCORE_TICK);
                         let dest = R(113 + 36 * n as i32, 100, 147 + 36 * n as i32, 145);
-                        self.canvas.copy_bits(&a.objects, LETTERS[SPELL[n]], dest);
+                        self.letter(a, SPELL[n], dest);
                     }
                 } else if t <= d + 48 + 160 {
                     // twenty rows, each lower and shakier, drawn over the last
@@ -242,11 +285,21 @@ impl Show {
                     let (i, l) = (k / 8 + 1, (k % 8) as usize);
                     if l == 0 {
                         self.row = R(113, 100 + i * 8, 147, 145 + i * 8);
+                        // the silhouette view's falling word leaves pages,
+                        // not crumbs of its letters
+                        if self.sharp {
+                            for (k, p) in self.canvas.px.iter_mut().enumerate() {
+                                if *p == INK {
+                                    *p = WHITE;
+                                    self.canvas.fore[k] = Some((WHITE, false));
+                                }
+                            }
+                        }
                     }
                     let j = self.randomize(i * 2 + 1) - i;
                     self.row.offset(j, 0);
                     let dest = self.row;
-                    self.canvas.copy_bits(&a.objects, LETTERS[SPELL[l]], dest);
+                    self.letter(a, SPELL[l], dest);
                     self.row.offset(36, 0);
                 }
             }

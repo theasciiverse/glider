@@ -31,6 +31,18 @@ pub struct Canvas {
     /// When set, masked sprites are painted solid in this colour: the
     /// silhouette view.
     pub ink: Option<Rgb>,
+    /// The silhouettes alone, pixel by pixel, when not empty: what the
+    /// silhouette view draws in sharper characters than the room behind.
+    /// The art's dark parts inside a shape (a glider's lower wing and its
+    /// folds) are a darker shade of the ink there. The flag is set for
+    /// silhouettes, whose thin parts must not vanish into the room, and
+    /// clear for the clock, drawn as sharply (`draw::flat_clock`).
+    pub fore: Vec<Option<(Rgb, bool)>>,
+}
+
+/// A silhouette's ink where the art is dark.
+pub fn shade(c: Rgb) -> Rgb {
+    c.map(|v| (v as u32 * 9 / 20) as u8)
 }
 
 /// The 50% gray pattern, $AA55...: set where x + y is even.
@@ -40,13 +52,20 @@ fn gray(x: i32, y: i32) -> bool {
 
 impl Canvas {
     pub fn new() -> Canvas {
-        Canvas { px: vec![WHITE; (W * H) as usize], clip: WHOLE, ink: None }
+        Canvas { px: vec![WHITE; (W * H) as usize], clip: WHOLE, ink: None, fore: Vec::new() }
     }
 
     pub fn set(&mut self, x: i32, y: i32, c: Rgb) {
         let r = self.clip;
         if x >= r.left.max(0) && x < r.right.min(W) && y >= r.top.max(0) && y < r.bottom.min(H) {
             self.px[(y * W + x) as usize] = c;
+        }
+    }
+
+    fn set_fore(&mut self, x: i32, y: i32, c: (Rgb, bool)) {
+        let r = self.clip;
+        if x >= r.left.max(0) && x < r.right.min(W) && y >= r.top.max(0) && y < r.bottom.min(H) {
+            self.fore[(y * W + x) as usize] = Some(c);
         }
     }
 
@@ -167,6 +186,62 @@ impl Canvas {
                 if a.mask_at(msk.left + sx, msk.top + sy) {
                     let c = self.ink.unwrap_or_else(|| a.objects.at(src.left + sx, src.top + sy));
                     self.set(dst.left + x, dst.top + y, c);
+                    if self.ink.is_some() && !self.fore.is_empty() {
+                        let (ax, ay) = (msk.left + sx, msk.top + sy);
+                        let inside = a.mask_at(ax - 1, ay) && a.mask_at(ax + 1, ay) && a.mask_at(ax, ay - 1) && a.mask_at(ax, ay + 1);
+                        let dark = a.objects.at(src.left + sx, src.top + sy).iter().all(|&v| v < 100);
+                        self.set_fore(dst.left + x, dst.top + y, (if inside && dark { shade(c) } else { c }, true));
+                    }
+                }
+            }
+        }
+    }
+
+    /// A thing of the house drawn from its art for the silhouette view's
+    /// matcher (`draw::sharp_art`): without the black outline around it,
+    /// a dark fringe at terminal sizes, and recorded in `fore` in its own
+    /// colours.
+    pub fn art(&mut self, a: &Assets, src: Rect, dst: Rect) {
+        let (dw, dh) = (dst.width(), dst.height());
+        if dw <= 0 || dh <= 0 || src.empty() {
+            return;
+        }
+        for y in 0..dh {
+            for x in 0..dw {
+                let (ax, ay) = (src.left + x * src.width() / dw, src.top + y * src.height() / dh);
+                if !a.mask_at(ax, ay) {
+                    continue;
+                }
+                let c = a.objects.at(ax, ay);
+                let edge = !(a.mask_at(ax - 1, ay) && a.mask_at(ax + 1, ay) && a.mask_at(ax, ay - 1) && a.mask_at(ax, ay + 1));
+                if !(edge && c.iter().all(|&v| v < 64)) {
+                    self.put(dst.left + x, dst.top + y, c);
+                }
+            }
+        }
+    }
+
+    /// A pixel drawn and recorded in `fore` as a thing of the house, for a
+    /// picture drawn for the silhouette view (GameOver's paper letters).
+    pub fn put(&mut self, x: i32, y: i32, c: Rgb) {
+        self.set(x, y, c);
+        if !self.fore.is_empty() {
+            self.set_fore(x, y, (c, false));
+        }
+    }
+
+    /// Records in `fore` what changed in `r` since `before` (a copy of `px`),
+    /// as a thing of the house: a picture drawn for the silhouette view, as
+    /// the clock is.
+    pub fn keep_changes(&mut self, before: &[Rgb], r: Rect) {
+        if self.fore.is_empty() {
+            return;
+        }
+        for y in r.top.max(0)..r.bottom.min(H) {
+            for x in r.left.max(0)..r.right.min(W) {
+                let k = (y * W + x) as usize;
+                if self.px[k] != before[k] {
+                    self.fore[k] = Some((self.px[k], false));
                 }
             }
         }

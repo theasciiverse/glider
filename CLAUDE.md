@@ -119,12 +119,52 @@ Two looks, V switches, saved in glider.cfg (`--silhouette`, `--original`):
   became a red slab, the clock a yellow square). Drawn in Braille cells (AQuest's
   Mixed method, brightest pixel per dot); the headline's figures go to the status
   line as text.
+- **Sharper silhouettes** (David asked for crisper ships and enemies, 2026-10-27):
+  `scene` records the silhouettes alone in `Canvas::fore`, and every cell with one
+  in it gets the character whose drawn shape is nearest (`view::sharp_cell`): block
+  eighths and quadrants, light and heavy lines, `╱╲`, or Braille, each sampled as
+  8x16 points; every pair of the cell's colours is tried. The art's dark parts
+  inside a shape (the glider's and dart's lower wing, the folds) are `gfx::shade`
+  of the ink, so the glider reads as folded paper again. A silhouette point lost to
+  the background counts twice, or the 'copter's two-pixel blades vanish (test
+  `silhouettes_keep_thin_parts_and_shades`). Braille costs a little extra, as its
+  dots read as fuzz. Transitions drop `fore`, except the time bonus. Costs about
+  1 ms a frame. What is behind keeps up to two of its own colours in a cell (a
+  table top and the wall above it). Only Box Drawing, Block Elements and Braille are used, which
+  terminals draw themselves; the Legacy Computing wedges (U+1FB3C on) would give
+  smoother slopes but were not checked across terminals.
+- **The clock** (David: it looked "like a ball of yarn", 2026-10-27) is drawn flat,
+  like the tables (`draw::flat_clock`): its art's geometry (32x29) in plain shapes,
+  yellow rim and bells, white face, two-pixel black hands and feet, recorded in
+  `fore` without the silhouette flag and so drawn by the same cell matcher
+  (test `the_clock_reads_as_a_clock`). Tried first and dropped: every kept-art
+  object through the matcher in its own colours, without its outer black
+  outline. The clock stayed a tangle (shaded rim, one-pixel hands) and the books
+  lost their colours to the black lines between them.
+- **Objects in their own colours** (David asked for "the computer and some other
+  objects", 2026-10-27; the books stay as they are): `draw::sharp_art` lists the
+  house's things drawn through the matcher in their art's colours, without the
+  outer black outline (`Canvas::art`): the Mac, kettle, fish bowl, guitar, power
+  switch, thermostat, vents, ceiling duct and drip. Chosen object by object from
+  renders in rooms of The House. Kept in Braille: books, battery, rubber bands,
+  candle (Braille's brightest dot keeps their small bright detail on a dark body:
+  orange label, green lettering, brass), paper, outlet, grease, fans, basket;
+  toaster, shredder and light switch came out worse in flat colour. Test
+  `the_mac_is_drawn_in_its_colours`.
+- **GAME OVER** (David: "needs work", 2026-10-27): the falling word's sheets of
+  notebook paper are drawn plain in this view (`Show::letter`): white, purple
+  letter, the top edge as a gray line, no rules, margin, holes or black sides;
+  recorded in `fore`, so the letters are crisp. As each new row starts, the
+  last row's letters become paper, so only the falling word carries letters and
+  the pile above it reads as a stack of pages (on the Mac it is a smear of letter
+  crumbs). The animation and timing are Calhoun's. Test
+  `game_over_letters_are_sharp`. The Original view's GAME OVER is unchanged.
 
 In both views, text that appears during play is terminal text over the picture, not
 the Mac's 12-point letters, which are a smudge at terminal sizes (David, 2026-10-27):
 the time bonus box, the points floating up from a prize, the final score on the
 GAME OVER screen (`draw::Label`, `Show::label`, `view::draw_labels`). The GAME
-OVER letters stay art. The Original view's headline bar is still drawn as on the Mac.
+OVER letters stay art (simplified in the silhouette view, above). The Original view's headline bar is still drawn as on the Mac.
 
 ## Glider PRO (separate title, not started)
 
