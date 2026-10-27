@@ -45,6 +45,9 @@ pub enum Cmd {
     Backspace,
     /// A left or right key: the player is on the keyboard.
     Steer,
+    /// The pad steered: hold control, whatever the terminal reports, since
+    /// a pad's presses and releases are exact.
+    PadSteer,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -67,6 +70,8 @@ pub struct Input {
     gilrs: Option<gilrs::Gilrs>,
     pub pad_name: Option<String>,
     pad: [bool; KEYS],
+    /// Where the stick last pointed: -1 left, 0 the middle, 1 right.
+    stick: i32,
 }
 
 impl Input {
@@ -83,6 +88,7 @@ impl Input {
             gilrs: None,
             pad_name: None,
             pad: [false; KEYS],
+            stick: 0,
         }
     }
 
@@ -194,7 +200,7 @@ impl Input {
         #[cfg(feature = "gamepad")]
         match gilrs::Gilrs::new() {
             Ok(g) => {
-                self.pad_name = g.gamepads().map(|(_, p)| p.name().to_string()).next();
+                self.pad_name = first_pad(&g);
                 log::info!("gamepad: {:?}", self.pad_name);
                 self.gilrs = Some(g);
             }
@@ -208,9 +214,19 @@ impl Input {
             use gilrs::{Axis, Button, EventType};
             let Some(g) = &mut self.gilrs else { return };
             while let Some(ev) = g.next_event() {
+                if matches!(ev.event, EventType::Connected | EventType::Disconnected) {
+                    self.pad_name = first_pad(g);
+                    log::info!("gamepad: {:?}", self.pad_name);
+                }
+                if !is_pad(&g.gamepad(ev.id)) {
+                    continue;
+                }
+                if ev.event == EventType::Disconnected {
+                    self.pad = [false; KEYS];
+                    self.stick = 0;
+                    continue;
+                }
                 match ev.event {
-                    EventType::Connected => self.pad_name = Some(g.gamepad(ev.id).name().to_string()),
-                    EventType::Disconnected => self.pad_name = None,
                     EventType::ButtonPressed(b, _) => {
                         log::debug!("pad press {b:?}");
                         self.cmds.push(Cmd::Any);
@@ -220,7 +236,7 @@ impl Input {
                             Button::Select => self.cmds.push(Cmd::Back),
                             Button::DPadUp => self.cmds.push(Cmd::Up),
                             Button::DPadDown => self.cmds.push(Cmd::Down),
-                            Button::DPadLeft | Button::DPadRight => self.cmds.push(Cmd::Steer),
+                            Button::DPadLeft | Button::DPadRight => self.cmds.push(Cmd::PadSteer),
                             _ => {}
                         }
                     }
@@ -228,6 +244,12 @@ impl Input {
                 }
                 let pad = g.gamepad(ev.id);
                 let x = pad.axis_data(Axis::LeftStickX).map_or(0.0, |d| d.value());
+                // pushing the stick over steers as the d-pad does
+                let stick = if x < -0.4 { -1 } else if x > 0.4 { 1 } else { 0 };
+                if stick != 0 && stick != self.stick {
+                    self.cmds.push(Cmd::PadSteer);
+                }
+                self.stick = stick;
                 self.pad = [
                     pad.is_pressed(Button::DPadLeft) || x < -0.4,
                     pad.is_pressed(Button::DPadRight) || x > 0.4,
@@ -251,6 +273,19 @@ impl Input {
         self.button_latched = false;
         crate::game::Controls { left: held[LEFT], right: held[RIGHT], energy: held[ENERGY], band: held[BAND], mouse_x: self.mouse_x, button }
     }
+}
+
+/// A gamepad has the buttons Glider asks for. gilrs lists other joystick
+/// devices too: a 3Dconnexion SpaceMouse has axes and a button but no A and
+/// no Start, and counted as a pad, nudging it steered the glider.
+#[cfg(feature = "gamepad")]
+fn is_pad(p: &gilrs::Gamepad) -> bool {
+    p.button_code(gilrs::Button::South).is_some() && p.button_code(gilrs::Button::Start).is_some()
+}
+
+#[cfg(feature = "gamepad")]
+fn first_pad(g: &gilrs::Gilrs) -> Option<String> {
+    g.gamepads().find(|(_, p)| is_pad(p)).map(|(_, p)| p.name().to_string())
 }
 
 fn held_by_repeat(k: &Key, now: Instant) -> bool {

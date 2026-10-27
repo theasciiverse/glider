@@ -360,6 +360,7 @@ impl App {
                             }
                             Cmd::Quit => self.end_game(),
                             Cmd::Steer => self.set_method(self.method()),
+                            Cmd::PadSteer => self.set_method(Method::HoldKey),
                             _ => {}
                         }
                     }

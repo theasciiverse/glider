@@ -60,6 +60,17 @@ when the terminal sends no key releases), switched by pressing a steering key;
 moving the mouse over the room switches to Glider's absolute mouse control
 (the original default). "Ozma" typed on the title screen: 50 gliders, as in Glider.
 
+Gamepad (`gilrs`, feature `gamepad`, on by default): d-pad or left stick steer, A
+fires a band and confirms, B or right trigger boosts, Start pauses, Select goes
+back. Confirmed working by David with a real controller, 2026-10-27. Steering
+with the pad (d-pad, or the stick pushed over) always selects hold control
+(`Cmd::PadSteer`), since a pad's presses and releases are exact whatever the
+terminal reports; a keyboard steering key still picks hold or tap from the
+terminal. Only devices with an A and a Start button count as pads
+(`input::is_pad`): gilrs also lists other joysticks, and a 3Dconnexion SpaceMouse
+(axes and one button) was taken for the pad and would have steered. Checked
+2026-10-27 with both plugged in: the Xbox 360 controller is picked.
+
 ## Based on Glider, not a replica (David, 2026-10-27)
 
 This is a terminal game based on Glider 4. The Pascal is translated faithfully as the
