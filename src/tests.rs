@@ -26,9 +26,10 @@ fn watch(name: &str, seed: u32, max: usize) -> (Game, Vec<Fx>) {
 /// actually PLAYS ITSELF ... AND IT NEVER CRASHES!" Untouched, the glider
 /// must fly every room to the end and keep all five gliders. Its open
 /// window rooms are random, so several seeds.
-/// Not passing yet: at 2 ticks a frame (Glider's speed on a fast Mac) the
-/// first glider is lost in room 7, to the toaster; at 3 ticks a frame it
-/// gets to room 13. Being worked out, see CLAUDE.md.
+/// Does not pass, and is not expected to (study of 2026-10-27, in
+/// CLAUDE.md): the house is tuned to the frame timing of the Mac it was
+/// built on. At Glider's own 2 ticks a frame the toaster in room 7 takes
+/// a glider; no single speed suits rooms 7, 13 and 21 together.
 #[test]
 #[ignore]
 fn hands_off_house_plays_itself() {
@@ -81,6 +82,7 @@ fn trace_hands_off_room() {
     let lib = Library::default();
     let h = lib.load(b"Hands-off House").unwrap();
     let mut g = Game::new(lib, b"Hands-off House", h, Method::HoldKey, 1);
+    g.frame_ticks = std::env::var("FT").ok().and_then(|v| v.parse().ok()).unwrap_or(2.0);
     g.start(false);
     let mut entered = None;
     for f in 0..200_000 {
@@ -120,38 +122,45 @@ fn trace_hands_off_room() {
 }
 
 /// A developer's tool: where Hands-off House first loses a glider, by
-/// ticks per frame and the ReadyRoom estimate, over five seeds.
+/// ticks per frame (FT, several as "2.0,2.5"; default 2.0 to 4.0 in tenths)
+/// and the ReadyRoom estimate (RR, default 0), over five seeds.
 #[test]
 #[ignore]
 fn sweep_ready_room_ticks() {
-    for (ft, rr) in [2, 3, 4].iter().flat_map(|&f| [0i64, 5, 10, 20, 40].map(move |r| (f, r))) {
-        let mut results = Vec::new();
-        for seed in [1u32, 12345, 987_654_321, 42, 7] {
-            let lib = Library::default();
-            let h = lib.load(b"Hands-off House").unwrap();
-            let mut g = Game::new(lib, b"Hands-off House", h, Method::HoldKey, seed);
-            g.ready_room_ticks = rr;
-            g.frame_ticks = ft;
-            g.start(false);
-            let mut first_death = None;
-            for _ in 0..200_000 {
-                if !g.playing {
-                    break;
+    let list = |k: &str| std::env::var(k).ok().map(|v| v.split(',').filter_map(|x| x.parse::<f64>().ok()).collect::<Vec<_>>());
+    let fts = list("FT").unwrap_or_else(|| (20..=40).map(|t| t as f64 / 10.0).collect());
+    let rrs = list("RR").unwrap_or_else(|| vec![0.0]);
+    for &ft in &fts {
+        for &rr in &rrs {
+            let mut results = Vec::new();
+            for seed in [1u32, 12345, 987_654_321, 42, 7] {
+                let lib = Library::default();
+                let h = lib.load(b"Hands-off House").unwrap();
+                let mut g = Game::new(lib, b"Hands-off House", h, Method::HoldKey, seed);
+                g.ready_room_ticks = rr as i64;
+                g.frame_ticks = ft;
+                g.start(false);
+                let mut first_death = None;
+                for _ in 0..200_000 {
+                    if !g.playing {
+                        break;
+                    }
+                    let m = g.mortals;
+                    g.step(Controls::default());
+                    g.sounds.clear();
+                    g.fx.clear();
+                    if g.mortals < m && first_death.is_none() {
+                        first_death = Some(g.room_at);
+                    }
                 }
-                let m = g.mortals;
-                g.step(Controls::default());
-                g.sounds.clear();
-                g.fx.clear();
-                if g.mortals < m && first_death.is_none() {
-                    first_death = Some(g.room_at);
-                }
+                results.push(match first_death {
+                    None if !g.playing => "WON".to_string(),
+                    None => "stuck".to_string(),
+                    Some(r) => format!("r{r}"),
+                });
             }
-            results.push(match first_death {
-                None => "ok".to_string(),
-                Some(r) => format!("r{r}"),
-            });
+            println!("frame_ticks {ft:.1} ready_room {rr:2}: {}", results.join(" "));
         }
-        println!("frame_ticks {ft} ready_room_ticks {rr:2}: {}", results.join(" "));
     }
 }
 
@@ -168,3 +177,38 @@ fn in_game_text_is_terminal_text() {
     let text: String = (0..area.height).map(|y| (0..area.width).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect();
     assert!(text.contains("Time Bonus = 192"), "{text}");
 }
+
+/// A developer's tool: Hands-off House with a thousand gliders at each
+/// speed, listing the rooms where gliders were lost and how many.
+#[test]
+#[ignore]
+fn hands_off_deaths_by_room() {
+    for ft10 in 20..=32 {
+        let ft = ft10 as f64 / 10.0;
+        let lib = Library::default();
+        let h = lib.load(b"Hands-off House").unwrap();
+        let mut g = Game::new(lib, b"Hands-off House", h, Method::HoldKey, 1);
+        g.frame_ticks = ft;
+        g.start(false);
+        g.mortals = 1000;
+        let mut deaths = std::collections::BTreeMap::new();
+        let mut frames = 0;
+        while g.playing && frames < 400_000 {
+            let m = g.mortals;
+            let room = g.room_at;
+            g.step(Controls::default());
+            g.sounds.clear();
+            g.fx.clear();
+            if g.mortals < m {
+                *deaths.entry(room).or_insert(0) += 1;
+                // a room that kills every time would loop forever: move on
+                if deaths[&room] >= 20 {
+                    break;
+                }
+            }
+            frames += 1;
+        }
+        println!("ft {ft:.1}: {} rooms passed {}, deaths by room {:?}", if g.playing { "STUCK" } else { "ended" }, g.rooms_passed, deaths);
+    }
+}
+

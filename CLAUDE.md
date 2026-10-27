@@ -62,16 +62,30 @@ moving the mouse over the room switches to Glider's absolute mouse control
 
 ## Known gaps (2026-10-27)
 
-- **Hands-off House** (plays itself, "never crashes") does not play through yet.
-  At 2 ticks a frame the first glider is lost in room 7 to the toaster (the toaster
-  waits `extra` ticks between launches while the toast flies in frames); at 3 ticks
-  a frame it gets to room 13 ("Shockproof!", outlet timing, the very room its Read
-  Me says was fixed by changing an outlet delay from 100 to 110). The house was
-  built on an LC II with an accelerator, likely slower than 2 ticks a frame. Not yet
-  known whether this is the house's machine dependence or a port error.
-  `cargo test -- --ignored sweep_ready_room_ticks` and `trace_hands_off_room` are the
-  tools. `READY_ROOM_TICKS` (time the Mac spent drawing a new room after the timers
-  were set) is 0 for now; the sweep showed it does not matter for rooms 7 and 13.
+- **Hands-off House** (Ward Hartenstein's house that plays itself) does not play
+  through, and the study of 2026-10-27 says the port is not why. Findings:
+  - Every glider lost is at a point where a timer counted in Mac ticks meets the
+    glider's motion counted in frames: the toaster's wait between launches (room 7,
+    `extra` = 30 ticks), the outlets' spark cycles (room 13), and the power switches'
+    90-tick lockout (room 21, "Switch twitch.": the design needs the glider back up
+    past a switch within 90 ticks of passing it going down, so the switch ignores it).
+  - Sweeping ticks per frame (`frame_ticks`, fractional allowed): room 7 passes only
+    from 2.4 to 3.0, room 21 only at about 2.0 (2.1 to 2.3 fail it), and room 13 fails
+    at every speed tried, for every ReadyRoom drawing cost from 0 to 60 ticks. No
+    single machine speed plays the house. A frame cost growing with the number of
+    moving things drawn (2 + k per mover, k 0 to 0.5) did not fit either; dropped
+    rather than fitting more parameters.
+  - Rooms without such timers play through at every speed, and the house's own Read
+    Me says room 13 "occasionally" fried the glider on the original too.
+  - So the house depends on how long each frame took on Ward's LC II, which varied
+    with what was drawn. Glider here keeps the game's own timing: 2 ticks a frame,
+    as on any Mac fast enough.
+  - The definitive check, not done: run Glider 4.05 itself in a Mac emulator (Mini
+    vMac or Basilisk II) and compare frame by frame. The repo has the source and the
+    THINK Pascal project, not a built application.
+  - Tools: `frame_ticks` and `ready_room_ticks` on `Game` (defaults 2.0 and 0, the
+    true game), and the ignored tests `sweep_ready_room_ticks` (FT, RR),
+    `hands_off_deaths_by_room` and `trace_hands_off_room` (ROOM, FT).
   `DISSOLVE_TICKS` = 12 is an estimate.
 - Not done: saved games, help screen idle demos (STR# 131), air currents visible
   (ppat 128/129), relative mouse, B&W art, the Room Editor.

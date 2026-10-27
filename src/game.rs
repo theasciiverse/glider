@@ -272,8 +272,10 @@ pub struct Game {
     rand_seed: u32,
     pub ready_room_ticks: i64,
     /// Ticks a frame takes: Coordinate never goes faster than 2, a slow Mac
-    /// took longer. For studying houses built on slower machines.
-    pub frame_ticks: i64,
+    /// took longer, and not always a whole number (2.5: frames of 2 and 3
+    /// ticks in turn). For studying houses built on slower machines.
+    pub frame_ticks: f64,
+    tick_frac: f64,
 
     pub playing: bool,
     pub room_at: i32,
@@ -340,7 +342,8 @@ impl Game {
             ticks: 0,
             rand_seed: seed.max(1),
             ready_room_ticks: READY_ROOM_TICKS,
-            frame_ticks: 2,
+            frame_ticks: 2.0,
+            tick_frac: 0.0,
             playing: false,
             room_at: 1,
             rooms_passed: 1,
@@ -497,7 +500,10 @@ impl Game {
                 self.bump_the_score();
             }
         }
-        self.ticks = self.ticks.max(time_is + self.frame_ticks);
+        self.tick_frac += self.frame_ticks;
+        let whole = self.tick_frac.floor();
+        self.tick_frac -= whole;
+        self.ticks = self.ticks.max(time_is + whole as i64);
         self.loops_thru_room += 1;
         self.bass_loop += 1;
         if self.bass_loop >= self.play_bass_time {
