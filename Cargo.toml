@@ -1,6 +1,6 @@
 [package]
 name = "glider"
-version = "0.1.0"
+version = "0.8.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Glider 4.0 (John Calhoun, 1991) in the terminal: the paper airplane in the house, for the Asciiverse catalog"
