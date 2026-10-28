@@ -108,6 +108,9 @@ only over the value it was made for:
 
 ## Known gaps (2026-10-27)
 
+Version 0.8.0 (2026-10-28). What comes next, release by release, is in `ROADMAP.md`.
+
+
   `DISSOLVE_TICKS` = 12 is an estimate.
 - Not done: saved games, help screen idle demos (STR# 131), air currents visible
   (ppat 128/129), relative mouse, B&W art, the Room Editor.
