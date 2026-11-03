@@ -13,6 +13,12 @@ everything below is in.
 - [x] Two views: Calhoun's art, and the silhouette view (V switches)
 - [x] High scores per house; "Ozma"
 
+## 0.8.1: built
+
+- [x] Gamepads work on Windows: gilrs reads them through XInput, since its
+  default (Windows Gaming Input) only reports to a program with a focused
+  window of its own, which a terminal game never has
+
 ## 0.9.0: the rest of the game
 
 - [ ] Saved games

@@ -1,6 +1,6 @@
 [package]
 name = "glider"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 rust-version = "1.88"
 description = "Glider 4.0 (John Calhoun, 1991) in the terminal: the paper airplane in the house, for the Asciiverse catalog"
@@ -16,7 +16,7 @@ ratatui = "0.30"
 log = "0.4"
 env_logger = "0.11"
 rodio = { version = "0.22", default-features = false, features = ["playback"] }
-gilrs = { version = "0.11", optional = true }
+gilrs = { version = "0.11", optional = true, default-features = false, features = ["xinput"] }
 
 [features]
 default = ["gamepad"]
